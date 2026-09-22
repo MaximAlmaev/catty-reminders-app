@@ -1,4 +1,4 @@
-!#/bin/bash
+#!/bin/bash
 
 PROXY=course.prafdin.space
 TOKEN=devops
