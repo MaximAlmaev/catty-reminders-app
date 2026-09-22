@@ -1,0 +1,9 @@
+.venv/
+.git/
+.idea/
+__pycache__/
+*.pyc
+.env
+.env.deploy
+reminder_db.json
+test_result.xml
