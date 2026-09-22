@@ -1,0 +1,24 @@
+services:
+  app:
+    image: ghcr.io/maximalmaev/catty-reminders-app:latest
+    ports:
+      - "8181:8181"
+    environment:
+      - DATABASE_URL=mysql://user:mypass@db:3306/catty_reminders
+    depends_on:
+      - db
+
+
+  db:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=mypass
+      - MYSQL_DATABASE=catty_reminders
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=mypass
+    volumes:
+      - db-data:/var/lib/mysql
+
+
+volumes:
+  db-data:
