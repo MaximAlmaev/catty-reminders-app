@@ -1,0 +1,60 @@
+name: CD
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: checkout-code
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: get-commit-hash
+      run: |
+        TAG=${{ github.event.release.tag_name }}
+        HASH=$(git rev-list -n 1 $TAG)
+        echo "RELEASE_HASH=$HASH" >> $GITHUB_ENV
+        echo "Release hash: $HASH"
+
+    - name: copy-compose-file
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ vars.HOST }}
+        username: ${{ vars.USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: ${{ vars.PORT }}
+        source: "docker-compose.yaml"
+        target: "/home/maxim/Desktop/catty-reminders-app"
+
+    - name: execute-remote-SSH-commands
+      uses: appleboy/ssh-action@v1
+      with:
+        host: ${{ vars.HOST }}
+        username: ${{ vars.USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: ${{ vars.PORT }}
+        script: |
+          set -e
+
+          cd /home/maxim/Desktop/catty-reminders-app
+
+          echo "${{ secrets.TOKEN }}" | docker login ghcr.io -u MaximAlmaev --password-stdin
+
+          docker compose pull
+
+          docker compose down
+
+          docker compose up -d
+          sleep 4
+
+          if docker compose ps | grep -q "app.*Up"; then
+              echo "Deployment completed successfully"
+          else
+              echo "ERROR: Application failed to start"
+              exit 1
+          fi
