@@ -1,23 +1,48 @@
 #!/bin/bash
 
-echo "🚀 Начинаем развертывание демо-сайта..."
+set -e
 
-APP_DIR="/home/maxim/Desktop/catty-reminders-app"
-APP_SERVICE="app.service"
-ENV_FILE="/etc/app.env"
-DEPLOY_REF="${DEPLOY_REF:-$(git rev-parse HEAD)}"
+PORT=${PORT:-22}
+DEPLOY_DIR="/home/maxim/Desktop/catty-reminders-app"
 
-# Копируем файлы
-echo "📁 Деплой $DEPLOY_REF в $APP_DIR"
-sudo rsync -a --delete \
-  --exclude '.git' \
-  --exclude '.venv' \
-  --exclude '__pycache__' \
-  --exclude '*.pyc' \
-  ./ "$APP_DIR"/
-echo "DEPLOY_REF=$DEPLOY_REF" | sudo tee "$ENV_FILE" >/dev/null
+echo "Deploying to $HOST:$PORT"
+echo "User: $USER"
+echo "Release branch: $RELEASE_BRANCH"
 
-echo "🔄 Перезапускаем сервис..."
-sudo systemctl restart "$APP_SERVICE"
+SSH_OPTIONS="-p $PORT -o StrictHostKeyChecking=no"
 
-echo "✅ Деплой завершён: $DEPLOY_REF"
+ssh $SSH_OPTIONS "$USER@$HOST" << EOF
+    set -e
+    
+    cd $DEPLOY_DIR
+    
+    git fetch origin
+    git checkout -f $RELEASE_HASH
+    git reset --hard
+    
+    DEPLOY_REF=\$(git rev-parse HEAD)
+    echo "DEPLOY_REF=\$DEPLOY_REF" | sudo tee /etc/app.env > /dev/null
+    sudo chmod 644 /etc/app.env
+    echo "Deployed version: \$DEPLOY_REF"
+    
+    if [ ! -d ".venv" ]; then
+        python3 -m venv .venv/
+    fi
+    
+    source .venv/bin/activate
+    
+    if [ -f "requirements.txt" ]; then
+        pip install -r requirements.txt
+    fi
+    
+    sudo systemctl restart app.service
+    
+    sleep 4
+    
+    if sudo systemctl is-active --quiet app.service; then
+        echo "Deployment completed successfully"
+    else
+        echo "ERROR: Application failed to start"
+        exit 1
+    fi
+EOF
