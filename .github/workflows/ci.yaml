@@ -16,6 +16,23 @@ jobs:
       contents: read
       packages: write
 
+    services:
+      db:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: mypass
+          MYSQL_DATABASE: catty_reminders
+          MYSQL_USER: user
+          MYSQL_PASSWORD: mypass
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uuser -pmypass"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+
     steps:
     - name: checkout-code
       uses: actions/checkout@v7
@@ -38,6 +55,8 @@ jobs:
         playwright install --with-deps chromium
 
     - name: run-catty-app
+      env:
+        DATABASE_URL: mysql://user:mypass@127.0.0.1:3306/catty_reminder
       run: |
         uvicorn app.main:app --host 0.0.0.0 --port 8181 &
         sleep 5
