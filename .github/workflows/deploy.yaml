@@ -45,6 +45,7 @@ jobs:
         
           echo "${{ secrets.TOKEN }}" | docker login ghcr.io -u MaximAlmaev --password-stdin
         
+          export IMAGE_TAG=${{ env.RELEASE_HASH }}
           docker compose pull app
           docker compose up -d --no-deps app
         
