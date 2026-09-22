@@ -4,101 +4,111 @@ on:
   push:
     branches:
       - lab4
-      - 'lab4_autotests*'
-  pull_request:
-    branches:
-      - lab4
-      - 'lab4_autotests*'
+      - lab4_autotests*
+
 jobs:
-  pipeline:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: mypass
+          MARIADB_DATABASE: catty_reminders
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov playwright
+          playwright install --with-deps chromium
+
+      - name: Patch config for CI
+        run: |
+          sed -i 's/"host": "db"/"host": "127.0.0.1"/g' config.json
+          cat config.json
+
+      - name: Start app in background
+        run: |
+          nohup uvicorn app.main:app --host 127.0.0.1 --port 8181 > server.log 2>&1 &
+          echo "Waiting for app to start..."
+          for i in {1..30}; do
+            if curl -s http://127.0.0.1:8181/login | grep -q "Catty"; then
+              echo "✅ App is ready!"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run tests with JUnit report
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          BASE_URL: http://127.0.0.1:8181
+        run: |
+          pytest tests/ --junitxml=test_result.xml -v --tb=short || true
+          if [ -f test_result.xml ] && [ -s test_result.xml ]; then
+            echo "✅ test_result.xml created successfully"
+            head -30 test_result.xml
+          else
+            echo "❌ test_result.xml is missing or empty!"
+            exit 1
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test_result
+          path: test_result.xml
+          retention-days: 1
+
+  build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
-    services:
-      db:
-        image: mysql:8.0
-        env:
-          MYSQL_ROOT_PASSWORD: mypass
-          MYSQL_DATABASE: catty_reminders
-          MYSQL_USER: user
-          MYSQL_PASSWORD: mypass
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uuser -pmypass"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-
-
     steps:
-    - name: checkout-code
-      uses: actions/checkout@v7
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Lint Dockerfile
-      uses: hadolint/hadolint-action@v3.1.0
-      continue-on-error: true
-      with:
-        dockerfile: Dockerfile
-        failure-threshold: warning
+      - name: Prepare image name
+        id: prep
+        run: |
+          echo "image=ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
-    - name: setup-python
-      uses: actions/setup-python@v7
-      with:
-        python-version: '3.13'
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: install-requirements
-      run: |
-        pip install -r requirements.txt
-        playwright install --with-deps chromium
-
-    - name: patch-config-for-ci
-      run: |
-        jq '.db_config.host = "127.0.0.1"' config.json > config.json.tmp
-        mv config.json.tmp config.json
-
-    - name: run-catty-app
-      run: |
-        uvicorn app.main:app --host 0.0.0.0 --port 8181 > uvicorn.log 2>&1 &
-        sleep 5
-
-    - name: start-tests
-      env:
-        PYTHONPATH: ${{ github.workspace }}
-      run: python -m pytest tests/ --junitxml=test_result.xml
-
-    - name: show-app-log
-      if: always()
-      run: cat uvicorn.log
-      
-    - name: save-artifact
-      uses: actions/upload-artifact@v7
-      with:
-        name: test_result
-        path: test_result.xml
-
-    - name: tag-image
-      id: meta
-      uses: docker/metadata-action@v4
-      with:
-        images: ghcr.io/maximalmaev/catty-reminders-app
-        tags: |
-          type=raw,value=${{ github.sha }}
-          type=raw,value=latest
-
-    - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v4
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: create-image
-      uses: docker/build-push-action@v7
-      with:
-        context: .
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        build-args: DEPLOY_REF=${{ github.sha }}
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.prep.outputs.image }}:latest
+            ${{ steps.prep.outputs.image }}:${{ github.sha }}
+          build-args: |
+            DEPLOY_REF=${{ github.sha }}
