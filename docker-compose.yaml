@@ -1,13 +1,13 @@
 services:
   app:
-    image: ghcr.io/maximalmaev/catty-reminders-app:latest
+    image: ghcr.io/maximalmaev/catty-reminders-app:${IMAGE_TAG:-latest}
     ports:
       - "8181:8181"
     environment:
       - DATABASE_URL=mysql://user:mypass@db:3306/catty_reminders
     depends_on:
-      - db
-
+      db:
+        condition: service_healthy
 
   db:
     image: mysql:8.0
@@ -18,7 +18,12 @@ services:
       - MYSQL_PASSWORD=mypass
     volumes:
       - db-data:/var/lib/mysql
-
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uuser -pmypass --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
 
 volumes:
   db-data:
