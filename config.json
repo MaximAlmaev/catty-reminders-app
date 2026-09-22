@@ -2,7 +2,7 @@
   "secret_key": "Cats are awesome!",
   "users": {
     "heisenberg": "P@ssw0rd",
-    "tester": "foobar123"
+    "tester": "foobar1234"
   },
   "db_config": {
     "host": "db",
