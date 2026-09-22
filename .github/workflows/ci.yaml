@@ -56,7 +56,7 @@ jobs:
 
     - name: run-catty-app
       env:
-        DATABASE_URL: mysql://user:mypass@127.0.0.1:3306/catty_reminder
+        DATABASE_URL: mysql://user:mypass@127.0.0.1:3306/catty_reminders
       run: |
         uvicorn app.main:app --host 0.0.0.0 --port 8181 &
         sleep 5
