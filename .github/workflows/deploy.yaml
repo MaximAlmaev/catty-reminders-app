@@ -21,7 +21,7 @@ jobs:
         with:
           host: ${{ vars.HOST }}
           username: ${{ vars.USER }}
-          port: ${{ vars.POST }}
+          port: ${{ vars.PORT }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -eu
