@@ -30,9 +30,9 @@ jobs:
     
     - name: Deploy to server
       env:
-        DEPLOY_HOST: ${{ vars.HOST }}
-        DEPLOY_USER: ${{ vars.USER }}
-        DEPLOY_PORT: ${{ vars.PORT }}
+        HOST: ${{ vars.HOST }}
+        USER: ${{ vars.USER }}
+        PORT: ${{ vars.PORT }}
         RELEASE_HASH: ${{ env.RELEASE_HASH }}
         RELEASE_BRANCH: ${{ env.RELEASE_BRANCH }}
       run: |
