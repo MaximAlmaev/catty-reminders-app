@@ -1,29 +1,30 @@
 services:
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?}
+      MARIADB_DATABASE: ${MARIADB_DATABASE:?}
+      MARIADB_USER: ${MARIADB_USER:?}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 10s
+      retries: 6
+
   app:
-    image: ghcr.io/maximalmaev/catty-reminders-app:${IMAGE_TAG:-latest}
+    image: ${IMAGE:?}
+    restart: unless-stopped
     ports:
       - "8181:8181"
-    environment:
-      - DATABASE_URL=mysql://user:mypass@db:3306/catty_reminders
+    volumes:
+      - ./config.json:/catty-reminders-app/config.json:ro
     depends_on:
       db:
         condition: service_healthy
 
-  db:
-    image: mysql:8.0
-    environment:
-      - MYSQL_ROOT_PASSWORD=mypass
-      - MYSQL_DATABASE=catty_reminders
-      - MYSQL_USER=user
-      - MYSQL_PASSWORD=mypass
-    volumes:
-      - db-data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uuser -pmypass --silent"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 30s
-
 volumes:
-  db-data:
+  db_data:
