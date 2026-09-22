@@ -40,18 +40,16 @@ jobs:
         port: ${{ vars.PORT }}
         script: |
           set -e
-
+        
           cd /home/maxim/Desktop/catty-reminders-app
-
+        
           echo "${{ secrets.TOKEN }}" | docker login ghcr.io -u MaximAlmaev --password-stdin
-
-          docker compose pull
-
-          docker compose down
-
-          docker compose up -d
+        
+          docker compose pull app
+          docker compose up -d --no-deps app
+        
           sleep 4
-
+        
           if docker compose ps | grep -q "app.*Up"; then
               echo "Deployment completed successfully"
           else
