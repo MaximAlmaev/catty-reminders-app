@@ -5,56 +5,35 @@ on:
     types: [published]
 
 jobs:
-  pipeline:
+  deploy:
     runs-on: ubuntu-latest
+    permissions:
+      packages: read
 
     steps:
-    - name: checkout-code
-      uses: actions/checkout@v7
-      with:
-        fetch-depth: 0
+      - name: Prepare image name
+        id: prep
+        run: |
+          echo "image=ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
-    - name: get-commit-hash
-      run: |
-        TAG=${{ github.event.release.tag_name }}
-        HASH=$(git rev-list -n 1 $TAG)
-        echo "RELEASE_HASH=$HASH" >> $GITHUB_ENV
-        echo "Release hash: $HASH"
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.HOST }}
+          username: ${{ vars.USER }}
+          port: ${{ vars.POST }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -eu
+            
+            cd /home/maxim/Desktop/catty-reminders-app
 
-    - name: copy-compose-file
-      uses: appleboy/scp-action@v0.1.7
-      with:
-        host: ${{ vars.HOST }}
-        username: ${{ vars.USER }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        port: ${{ vars.PORT }}
-        source: "docker-compose.yaml"
-        target: "/home/maxim/Desktop/catty-reminders-app"
-
-    - name: execute-remote-SSH-commands
-      uses: appleboy/ssh-action@v1
-      with:
-        host: ${{ vars.HOST }}
-        username: ${{ vars.USER }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        port: ${{ vars.PORT }}
-        script: |
-          set -e
-
-          cd /home/maxim/Desktop/catty-reminders-app
-
-          echo "${{ secrets.TOKEN }}" | docker login ghcr.io -u MaximAlmaev --password-stdin
-
-          export IMAGE_TAG=${{ env.RELEASE_HASH }}
-
-          docker compose pull app
-          docker compose up -d --no-deps app
-
-          sleep 6
-
-          if docker compose ps app | grep -q "Up"; then
-              echo "Deployment completed successfully"
-          else
-              echo "ERROR: Application failed to start"
-              exit 1
-          fi
+            export COMPOSE_PROJECT_NAME=catty-reminders-app
+            export IMAGE="${{ steps.prep.outputs.image }}:${{ github.sha }}"
+            export MARIADB_ROOT_PASSWORD=mypass
+            export MARIADB_DATABASE=catty_reminders
+            export MARIADB_USER=user
+            export MARIADB_PASSWORD=mypass
+            
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            docker compose up -d --pull always --remove-orphans
