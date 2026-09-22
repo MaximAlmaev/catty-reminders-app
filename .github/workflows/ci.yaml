@@ -54,9 +54,12 @@ jobs:
         pip install -r requirements.txt
         playwright install --with-deps chromium
 
+    - name: patch-config-for-ci
+      run: |
+        jq '.db_config.host = "127.0.0.1"' config.json > config.json.tmp
+        mv config.json.tmp config.json
+
     - name: run-catty-app
-      env:
-        DATABASE_URL: mysql://user:mypass@127.0.0.1:3306/catty_reminders
       run: |
         uvicorn app.main:app --host 0.0.0.0 --port 8181 > uvicorn.log 2>&1 &
         sleep 5
@@ -69,7 +72,7 @@ jobs:
     - name: show-app-log
       if: always()
       run: cat uvicorn.log
-
+      
     - name: save-artifact
       uses: actions/upload-artifact@v7
       with:
