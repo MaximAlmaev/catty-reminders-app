@@ -5,36 +5,45 @@ on:
     types: [published]
 
 jobs:
-  deploy:
+  pipeline:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout repository
+    - name: checkout-code
       uses: actions/checkout@v7
       with:
         fetch-depth: 0
 
-    - name: Get release commit hash
+    - name: get-commit-hash
       run: |
         TAG=${{ github.event.release.tag_name }}
         HASH=$(git rev-list -n 1 $TAG)
         echo "RELEASE_HASH=$HASH" >> $GITHUB_ENV
-        echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
-        echo "RELEASE_BRANCH=${{ github.event.release.target_commitish }}" >> $GITHUB_ENV
-        echo "Deploying release: $TAG, Hash: $HASH"
-    
-    - name: Setup SSH Agent
-      uses: webfactory/ssh-agent@v0.7.0
+        echo "Release hash: $HASH"
+
+    - name: execute-remote-SSH-commands
+      uses: appleboy/ssh-action@v1
       with:
-        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-    
-    - name: Deploy to server
-      env:
-        HOST: ${{ vars.HOST }}
-        USER: ${{ vars.USER }}
-        PORT: ${{ vars.PORT }}
-        RELEASE_HASH: ${{ env.RELEASE_HASH }}
-        RELEASE_BRANCH: ${{ env.RELEASE_BRANCH }}
-      run: |
-        chmod +x deploy.sh
-        ./deploy.sh
+        host: ${{ vars.HOST }}
+        username: ${{ vars.USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: ${{ vars.PORT }}
+        script: |
+          set -e
+
+          echo "${{ secrets.TOKEN }}" | docker login ghcr.io -u MaximAlmaev --password-stdin
+
+          docker pull ghcr.io/maximalmaev/catty-reminders-app:${{ env.RELEASE_HASH }}
+
+          docker stop catty-reminders-app || true
+          docker rm catty-reminders-app || true
+
+          docker run -d --name catty-reminders-app -p 8181:8181 ghcr.io/maximalmaev/catty-reminders-app:${{ env.RELEASE_HASH }}
+          sleep 4
+
+          if docker ps | grep -q catty-reminders-app; then
+              echo "Deployment completed successfully"
+          else
+              echo "ERROR: Application failed to start"
+              exit 1
+          fi
